@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<title>Disaster Relief AI — Priority Triage</title>
+<meta name="theme-color" content="#0F1512">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Relief Triage">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0F1512;
+    --bg-raised: #161F1A;
+    --panel: #1B2620;
+    --panel-line: #2A3A32;
+    --text: #ECEAE0;
+    --muted: #8FA098;
+    --muted-2: #647069;
+    --critical: #E24C34;
+    --critical-dim: #4A2620;
+    --high: #EFA23B;
+    --high-dim: #453321;
+    --moderate: #E4CE6E;
+    --moderate-dim: #3D3A28;
+    --low: #6FAE8B;
+    --low-dim: #22362C;
+    --line: #263229;
+    --nav-h: 64px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ margin:0; padding:0; overscroll-behavior-y: none; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  button{ font-family:inherit; }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+  .display{ font-family: 'Fraunces', serif; }
+  a{ color: inherit; }
+
+  /* ---------- App shell ---------- */
+  .app{
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    position: relative;
+  }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 10px;
+    padding: calc(14px + var(--safe-t)) 16px 12px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #121A15, #0F1512);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .brand-mark{
+    width:32px; height:32px; border-radius:8px; flex-shrink:0;
+    background: conic-gradient(from 220deg, var(--critical), var(--high), var(--low), var(--critical));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fraunces', serif; font-weight:700; color:#0F1512; font-size:14px;
+  }
+  .brand-text{ min-width:0; }
+  .brand-text h1{ font-size:14.5px; margin:0; letter-spacing:0.01em; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .brand-text p{ margin:1px 0 0; font-size:10.5px; color: var(--muted); letter-spacing:0.03em; text-transform:uppercase; white-space:nowrap; }
+
+  .top-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .status-dot-wrap{ display:flex; align-items:center; gap:6px; font-size:11px; color: var(--muted); }
+  .dot{ width:7px; height:7px; border-radius:50%; background: var(--low); box-shadow: 0 0 8px var(--low); animation: pulse 2s infinite; }
+  .dot.err{ background: var(--critical); box-shadow: 0 0 8px var(--critical); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .refresh-btn{
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    background: var(--panel); border:1px solid var(--panel-line); color: var(--text);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .refresh-btn:active{ transform: scale(0.94); }
+  .refresh-btn.spin svg{ animation: spin 0.7s linear; }
+  @keyframes spin{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
+
+  /* ---------- Ticker ---------- */
+  .ticker-wrap{ padding: 10px 0 0; }
+  .ticker{
+    display:flex; gap:8px; overflow-x:auto; padding: 0 16px 10px;
+    scrollbar-width: none;
+  }
+  .ticker::-webkit-scrollbar{ display:none; }
+  .ticker-item{
+    flex: 0 0 auto; display:flex; align-items:center; gap:7px;
+    background: var(--bg-raised); border:1px solid var(--line);
+    padding: 7px 12px; border-radius: 999px; font-size: 11.5px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .ticker-item b{ color: var(--text); font-weight:500; }
+  .ticker-item .sev{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+
+  .banner{
+    display:none; font-size:12px; padding:10px 16px; margin: 0 16px 12px; border-radius:10px; line-height:1.5;
+  }
+
+  /* ---------- Scope strip ---------- */
+  .scope-strip{
+    display:flex; flex-direction:column; gap: 8px;
+    background: var(--bg-raised); border:1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin: 0 16px 16px; font-size: 12px; color: var(--muted);
+  }
+  .scope-strip .phase{ display:flex; align-items:center; gap:7px; }
+  .scope-strip .phase b{ color: var(--text); font-weight:600; }
+  .scope-strip .phase-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+
+  /* ---------- Main / tab panels ---------- */
+  main{ flex:1; padding-bottom: calc(var(--nav-h) + var(--safe-b) + 20px); }
+  .tabpanel{ display:none; padding: 4px 16px 8px; animation: fadein 0.18s ease; }
+  .tabpanel.active{ display:block; }
+  @keyframes fadein{ from{ opacity:0; transform: translateY(4px);} to{ opacity:1; transform: translateY(0);} }
+
+  .section-head{ display:flex; justify-content:space-between; align-items:baseline; margin: 6px 0 12px; }
+  .section-head h2{ font-family:'Fraunces', serif; font-weight:600; font-size: 21px; margin:0; letter-spacing:-0.01em; }
+  .section-head .tag{ font-size:11px; color: var(--muted-2); }
+  .section-sub{ color: var(--muted); font-size: 13px; line-height:1.5; margin: -6px 0 16px; }
+
+  /* ---------- Triage groups ---------- */
+  .group{ border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .group.crit{ background: var(--critical-dim); border: 1px solid #6A3324; }
+  .group.high{ background: var(--high-dim); border: 1px solid #5C4527; }
+  .group.mod{ background: var(--moderate-dim); border: 1px solid #4E4A34; }
+  .group.low{ background: var(--low-dim); border: 1px solid #2F4A3B; }
+  .group-label{
+    font-size: 11.5px; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 4px 2px 10px;
+  }
+  .group.crit .group-label{ color: var(--critical); }
+  .group.high .group-label{ color: var(--high); }
+  .group.mod .group-label{ color: var(--moderate); }
+  .group.low .group-label{ color: var(--low); }
+  .group-label .count{
+    background: rgba(0,0,0,0.28); border-radius:999px; padding: 2px 9px; font-family:'IBM Plex Mono', monospace;
+  }
+  .group-empty{ font-size:12px; color: var(--muted); padding: 4px 2px 6px; }
+
+  .event-card{
+    background: rgba(0,0,0,0.22); border-radius: 11px; padding: 12px 13px; margin-bottom: 8px;
+    cursor: pointer; transition: transform 0.1s ease, background 0.12s ease;
+    border: 1px solid transparent;
+    display:flex; align-items:center; gap: 10px;
+    min-height: 44px;
+  }
+  .event-card:last-child{ margin-bottom:0; }
+  .event-card:active{ transform: scale(0.98); background: rgba(0,0,0,0.36); }
+  .event-card.active{ border-color: currentColor; }
+  .event-card .body{ flex:1; min-width:0; }
+  .event-card .name{ font-size: 13.5px; font-weight:600; margin-bottom:3px; }
+  .event-card .meta{ font-size: 10.5px; color: var(--muted); font-family:'IBM Plex Mono', monospace; }
+  .event-card .score{ font-family:'IBM Plex Mono', monospace; font-size: 11.5px; margin-top:5px; opacity:0.9; }
+  .event-card .chev{ flex-shrink:0; opacity:0.55; }
+
+  /* ---------- Details / SHAP ---------- */
+  .back-row{ display:flex; align-items:center; gap:8px; margin-bottom: 12px; }
+  .back-chip{
+    display:flex; align-items:center; gap:6px; font-size:12px; color: var(--muted);
+    background: var(--panel); border:1px solid var(--panel-line); border-radius: 999px;
+    padding: 7px 12px 7px 10px; cursor:pointer;
+  }
+  .back-chip:active{ transform: scale(0.96); }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    padding: 18px 16px 20px;
+    margin-bottom: 16px;
+  }
+  .panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .panel-head h3{ font-size: 12px; text-transform:uppercase; letter-spacing:0.08em; color: var(--muted); margin:0; font-weight:600; }
+  .panel-head .tag{ font-size:10.5px; color: var(--muted-2); }
+
+  .selected-title{ font-family:'Fraunces', serif; font-size:19px; font-weight:600; margin: 0 0 4px; }
+  .selected-sub{ font-size:12px; color: var(--muted); margin-bottom:16px; line-height:1.5; }
+  .shap-row{ margin-bottom: 12px; }
+  .shap-label{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px; gap:8px; }
+  .shap-label span:first-child{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .shap-label .val{ font-family:'IBM Plex Mono', monospace; color: var(--muted); flex-shrink:0; }
+  .shap-track{ height:8px; border-radius:4px; background: #0F1815; overflow:hidden; display:flex; }
+  .shap-bar{ height:100%; }
+  .shap-bar.pos{ background: var(--critical); }
+  .shap-bar.neg{ background: var(--low); }
+
+  .predict-box{
+    display:flex; align-items:center; gap:16px;
+    background: var(--bg-raised); border:1px solid var(--line); border-radius:10px;
+    padding: 14px 16px; margin-bottom:18px;
+  }
+  .predict-score{ font-family:'Fraunces', serif; font-size: 34px; font-weight:600; }
+  .predict-meta{ font-size:12px; color: var(--muted); line-height:1.5; }
+
+  .empty-state{
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+    padding: 40px 20px; color: var(--muted); gap:10px;
+  }
+  .empty-state svg{ opacity:0.5; }
+  .empty-state p{ font-size:13px; margin:0; max-width: 260px; line-height:1.5; }
+
+  /* ---------- Resource allocation ---------- */
+  .alloc-row{ display:flex; align-items:center; gap: 10px; margin-bottom: 14px; }
+  .alloc-label{ width: 84px; font-size: 12px; color: var(--muted); flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .alloc-bar-track{ flex:1; height: 10px; background:#0F1815; border-radius:5px; overflow:hidden; }
+  .alloc-bar-fill{ height:100%; border-radius:5px; }
+  .alloc-num{ font-family:'IBM Plex Mono', monospace; font-size: 11.5px; width: 40px; text-align:right; color: var(--muted); flex-shrink:0; }
+
+  /* ---------- Recommendation feed ---------- */
+  .rec-item{ display:flex; gap:12px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+  .rec-item:last-child{ border-bottom:none; padding-bottom:2px; }
+  .rec-item:first-child{ padding-top:2px; }
+  .rec-sev{ width: 4px; border-radius: 3px; flex-shrink:0; }
+  .rec-text b{ font-size: 13px; }
+  .rec-text p{ margin: 4px 0 0; font-size:12px; color: var(--muted); line-height:1.55; }
+
+  .footnote{
+    font-size: 11.5px; color: var(--muted-2); line-height:1.6;
+    padding: 4px 2px 18px;
+  }
+
+  /* ---------- Bottom nav ---------- */
+  .bottomnav{
+    position: fixed; bottom:0; left:50%; transform: translateX(-50%);
+    width:100%; max-width:560px;
+    display:flex;
+    background: rgba(19,27,22,0.92); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    padding: 6px 6px calc(6px + var(--safe-b));
+    z-index: 30;
+  }
+  .navbtn{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+    background:none; border:none; color: var(--muted-2); cursor:pointer;
+    padding: 7px 4px 5px; border-radius: 10px; position:relative;
+    min-height: 48px;
+  }
+  .navbtn:active{ background: rgba(255,255,255,0.04); }
+  .navbtn.active{ color: var(--text); }
+  .navbtn span{ font-size: 10px; letter-spacing:0.01em; font-weight:500; }
+  .navbtn .navdot{
+    position:absolute; top:4px; right: 22%; width:6px; height:6px; border-radius:50%;
+    display:none;
+  }
+  .navbtn .navdot.show{ display:block; }
+
+  @media (min-width: 600px){
+    .app{ box-shadow: 0 0 0 1px var(--line); }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">DR</div>
+      <div class="brand-text">
+        <h1>Disaster Relief AI</h1>
+        <p>India · Live Triage</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="status-dot-wrap"><span class="dot" id="statusDot"></span><span class="mono" id="lastRun">—</span></div>
+      <button class="refresh-btn" id="refreshBtn" aria-label="Refresh predictions" onclick="manualRefresh()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker"></div>
+  </div>
+  <div id="connBanner" class="banner"></div>
+
+  <main>
+    <!-- TRIAGE TAB -->
+    <section class="tabpanel active" id="tab-triage">
+      <div class="section-head">
+        <h2>Priority Lanes</h2>
+        <span class="tag">by severity</span>
+      </div>
+      <div class="section-sub">Every incoming report is scored by the trained model. Tap any event to see why it was scored that way.</div>
+
+      <div class="scope-strip">
+        <div class="phase"><span class="phase-dot" style="background:var(--low)"></span> <b>Phase 1 — India</b> · 28 states + 8 UTs</div>
+        <div class="phase"><span class="phase-dot" style="background:var(--moderate)"></span> <b>Phase 2 — South Asia</b> · cross-border reference</div>
+      </div>
+
+      <div id="lanes"></div>
+
+      <div class="footnote">Prototype for a B.E. CSE final-year project (XGBoost on EM-DAT). India events are simulated for demonstration. The Nepal card is a Phase 2 cross-border reference and is excluded from Phase 1 allocation.</div>
+    </section>
+
+    <!-- DETAILS TAB -->
+    <section class="tabpanel" id="tab-details">
+      <div class="section-head">
+        <h2>Why This Score</h2>
+        <span class="tag">SHAP</span>
+      </div>
+      <div id="detailsEmpty" class="empty-state" style="display:none;">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M8 12h8M8 16h5M8 8h3"></path></svg>
+        <p>Select an event from the Triage tab to see its predicted severity and the factors driving that score.</p>
+      </div>
+      <div id="detailsContent">
+        <div class="back-row">
+          <div class="back-chip" onclick="switchTab('triage')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            All lanes
+          </div>
+        </div>
+        <div class="panel" id="shapPanel">
+          <div class="selected-title" id="selTitle">—</div>
+          <div class="selected-sub" id="selSub">—</div>
+          <div class="predict-box">
+            <div class="predict-score" id="selScore">—</div>
+            <div class="predict-meta">Predicted severity index (0–100)<br><span class="mono" id="selTier">—</span></div>
+          </div>
+          <div id="shapBars"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Recommendation</h3>
+          </div>
+          <div id="selRec" style="font-size:13px; color:var(--text); line-height:1.55;">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ALLOCATION TAB -->
+    <section class="tabpanel" id="tab-alloc">
+      <div class="section-head">
+        <h2>Resource Allocation</h2>
+        <span class="tag">optimizer output</span>
+      </div>
+      <div class="section-sub">Illustrative split of a fixed relief budget across current Critical/High regions, weighted by predicted severity.</div>
+      <div class="panel">
+        <div id="alloc"></div>
+      </div>
+      <div class="footnote">In the full system this feeds a linear-programming allocator across shelter, medical, and transport capacity — not just a proportional split of a fixed pool.</div>
+    </section>
+
+    <!-- RECOMMENDATIONS TAB -->
+    <section class="tabpanel" id="tab-recs">
+      <div class="section-head">
+        <h2>Model Recommendations</h2>
+        <span class="tag">auto-generated</span>
+      </div>
+      <div class="panel">
+        <div id="recs"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottomnav">
+    <button class="navbtn active" data-tab="triage" onclick="switchTab('triage')">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+      <span>Triage</span>
+    </button>
+    <button class="navbtn" data-tab="details" onclick="switchTab('details')">
+      <span class="navdot" id="detailsDot"></span>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"></path><path d="M7 15l3-4 3 2 4-6"></path></svg>
+      <span>Details</span>
+    </button>
+    <button class="navbtn" data-tab="alloc" onclick="switchTab('alloc')">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 2A10 10 0 0 1 22 12"></path></svg>
+      <span>Allocation</span>
+    </button>
+    <button class="navbtn" data-tab="recs" onclick="switchTab('recs')">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+      <span>Recs</span>
+    </button>
+  </nav>
+
+</div>
+
+<script>
+// ---------------- API connection ----------------
+const API_BASE = 'http://127.0.0.1:5000';
+
+// ---------------- Event definitions ----------------
+// Display metadata is fixed (names, coordinates, human-readable context).
+// severity_score / priority_tier / SHAP explanation come from the live model —
+// these are NOT hardcoded; they're fetched from your trained XGBoost API below.
+const eventSeeds = [
+  {
+    id: 'e0', name: 'Rasuwagadhi Border Belt, Uttarakhand', type: 'Flash Flood — Himalayan Border Zone (simulated)',
+    deaths: 'Casualties reported, rescue ongoing', lat: '30.78°N', lon: '78.94°E',
+    features: { "Disaster Type": "Flood", "Disaster Subtype": "Flash flood", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "Yes" },
+    recs: 'Deploy air rescue given road cutoff; flag for glacial/high-altitude hazard monitoring, not just standard monsoon protocol.'
+  },
+  {
+    id: 'e1', name: 'Coastal Odisha, India', type: 'Cyclonic Storm (simulated)',
+    deaths: 'Evacuation in progress', lat: '19.8°N', lon: '85.8°E',
+    features: { "Disaster Type": "Storm", "Disaster Subtype": "Tropical cyclone", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": "Kph", "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Shelter capacity is typically the binding constraint in coastal cyclone response — prioritize shelter logistics.'
+  },
+  {
+    id: 'e4', name: 'Wayanad District, India', type: 'Landslide risk (simulated)',
+    deaths: 'No casualties reported', lat: '11.68°N', lon: '76.13°E',
+    features: { "Disaster Type": "Landslide", "Disaster Subtype": "Landslide", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Flag for field survey and continued sensor monitoring based on predicted tier.'
+  },
+  {
+    id: 'e5', name: 'Assam River Belt, India', type: 'Seasonal Flood (simulated)',
+    deaths: 'No casualties reported', lat: '26.2°N', lon: '92.9°E',
+    features: { "Disaster Type": "Flood", "Disaster Subtype": "Riverine flood", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 7, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Route to standard monsoon relief protocol unless predicted tier escalates.'
+  },
+  {
+    id: 'e6', name: 'Tripura Hills, India', type: 'Weather Advisory (simulated)',
+    deaths: 'None', lat: '23.9°N', lon: '91.6°E',
+    features: { "Disaster Type": "Storm", "Disaster Subtype": "Convective storm", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Continue passive monitoring based on predicted tier.'
+  },
+  {
+    id: 'e7', name: 'Rasuwa District, Nepal', type: 'Flash Flood / Glacial Debris Flow — Phase 2 preview',
+    deaths: '270+ confirmed, ~1,400 missing (real event, 26 Aug 2026)', lat: '28.10°N', lon: '85.36°E',
+    features: { "Disaster Type": "Flood", "Disaster Subtype": "Flash flood", "Country": "Nepal",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "Yes", "Declaration": "Yes" },
+    recs: 'Shown only as a cross-border Phase 2 reference — excluded from India Phase 1 allocation.',
+    phase2: true
+  },
+];
+
+const tierClass = { Critical:'crit', High:'high', Moderate:'mod', Low:'low' };
+const tierMeta = {
+  crit: {label:'Critical', color:'var(--critical)'},
+  high: {label:'High', color:'var(--high)'},
+  mod:  {label:'Moderate', color:'var(--moderate)'},
+  low:  {label:'Low', color:'var(--low)'},
+};
+
+let events = [];           // populated from the live API
+let selectedId = null;
+let liveMode = false;
+let currentTab = 'triage';
+
+function showBanner(text, kind){
+  const el = document.getElementById('connBanner');
+  el.style.display = 'block';
+  el.textContent = text;
+  el.style.background = kind === 'ok' ? 'var(--low-dim)' : 'var(--critical-dim)';
+  el.style.color = kind === 'ok' ? 'var(--low)' : 'var(--critical)';
+  el.style.border = '1px solid ' + (kind === 'ok' ? 'var(--low)' : 'var(--critical)');
+  document.getElementById('statusDot').className = kind === 'ok' ? 'dot' : 'dot err';
+}
+
+// Calls YOUR real Flask + XGBoost + SHAP backend for every seed event.
+async function fetchLivePredictions(){
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spin');
+  try {
+    const results = await Promise.all(eventSeeds.map(async seed => {
+      const res = await fetch(`${API_BASE}/predict`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(seed.features)
+      });
+      if(!res.ok) throw new Error('predict failed for ' + seed.id);
+      const data = await res.json();
+      return {
+        ...seed,
+        score: data.severity_score,
+        tier: tierClass[data.priority_tier],
+        shap: data.explanation.map(s => ({
+          label: s.feature,
+          val: Math.abs(s.shap_value),
+          dir: s.direction === 'increases_severity' ? 'pos' : 'neg'
+        }))
+      };
+    }));
+    events = results;
+    liveMode = true;
+    showBanner('Connected to live model — predictions computed by your trained XGBoost + SHAP backend just now.', 'ok');
+  } catch (err) {
+    liveMode = false;
+    showBanner('Could not reach the model server at ' + API_BASE + ' — showing static demo values instead. Start "python app.py" on your machine, then reload.', 'err');
+    // fallback so the app still renders something if the backend isn't running
+    events = eventSeeds.map(seed => ({
+      ...seed, score: 30, tier: 'mod',
+      shap: [{label:'Model server not reachable', val: 1, dir:'pos'}]
+    }));
+  }
+  secs = 0;
+  btn.classList.remove('spin');
+  renderAll();
+}
+
+function manualRefresh(){
+  document.getElementById('lastRun').textContent = 'updating…';
+  fetchLivePredictions();
+}
+
+function renderTicker(){
+  const el = document.getElementById('ticker');
+  el.innerHTML = events.map(e => `
+    <div class="ticker-item" onclick="selectEvent('${e.id}'); switchTab('details');">
+      <span class="sev" style="background:${tierMeta[e.tier].color}"></span>
+      <b>${e.name.split(',')[0]}</b> · ${e.score}
+    </div>
+  `).join('');
+}
+
+function renderLanes(){
+  const el = document.getElementById('lanes');
+  const order = ['crit','high','mod','low'];
+  el.innerHTML = order.map(tier => {
+    const items = events.filter(e => e.tier === tier).sort((a,b)=>b.score-a.score);
+    return `
+      <div class="group ${tier}">
+        <div class="group-label"><span>${tierMeta[tier].label}</span><span class="count mono">${items.length}</span></div>
+        ${items.length ? items.map(e => `
+          <div class="event-card ${e.id===selectedId ? 'active':''}" style="color:${tierMeta[tier].color}" onclick="selectEvent('${e.id}'); switchTab('details');">
+            <div class="body">
+              <div class="name" style="color:var(--text)">${e.name}${e.phase2 ? ' <span class="mono" style="font-size:9.5px;color:var(--muted-2)">· PHASE 2</span>' : ''}</div>
+              <div class="meta">${e.lat} · ${e.lon}</div>
+              <div class="score">severity ${e.score}/100</div>
+            </div>
+            <div class="chev">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </div>
+          </div>
+        `).join('') : `<div class="group-empty">No events in this tier right now.</div>`}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderShap(){
+  const dot = document.getElementById('detailsDot');
+  const empty = document.getElementById('detailsEmpty');
+  const content = document.getElementById('detailsContent');
+  const e = events.find(x => x.id === selectedId);
+  if(!e){
+    empty.style.display = 'flex';
+    content.style.display = 'none';
+    dot.className = 'navdot';
+    return;
+  }
+  empty.style.display = 'none';
+  content.style.display = 'block';
+  dot.className = 'navdot show';
+  dot.style.background = tierMeta[e.tier].color;
+
+  document.getElementById('selTitle').textContent = e.name;
+  document.getElementById('selSub').textContent = `${e.type} · ${e.deaths}`;
+  document.getElementById('selScore').textContent = e.score;
+  document.getElementById('selScore').style.color = tierMeta[e.tier].color;
+  document.getElementById('selTier').textContent = `Predicted tier: ${tierMeta[e.tier].label.toUpperCase()}${liveMode ? ' · live model' : ' · demo fallback'}`;
+  document.getElementById('selRec').textContent = e.recs;
+
+  const maxVal = Math.max(...e.shap.map(s => s.val));
+  document.getElementById('shapBars').innerHTML = e.shap.map(s => `
+    <div class="shap-row">
+      <div class="shap-label"><span>${s.label}</span><span class="val">${s.dir === 'pos' ? '+' : '−'}${s.val.toFixed ? s.val.toFixed(2) : s.val}</span></div>
+      <div class="shap-track">
+        <div class="shap-bar ${s.dir}" style="width:${(s.val/maxVal*100).toFixed(0)}%"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAlloc(){
+  const top = events.filter(e => !e.phase2 && (e.tier === 'crit' || e.tier === 'high')).sort((a,b)=>b.score-a.score);
+  const total = top.reduce((s,e)=>s+e.score,0) || 1;
+  document.getElementById('alloc').innerHTML = top.length ? top.map(e => {
+    const pct = Math.round(e.score/total*100);
+    return `
+      <div class="alloc-row">
+        <div class="alloc-label">${e.name.split(',')[0]}</div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:${pct}%; background:${tierMeta[e.tier].color}"></div></div>
+        <div class="alloc-num">${pct}%</div>
+      </div>
+    `;
+  }).join('') : '<div style="font-size:12px; color:var(--muted)">No Critical/High India events right now.</div>';
+}
+
+function renderRecs(){
+  const sorted = [...events].sort((a,b)=>b.score-a.score).slice(0,5);
+  document.getElementById('recs').innerHTML = sorted.map(e => `
+    <div class="rec-item" onclick="selectEvent('${e.id}'); switchTab('details');">
+      <div class="rec-sev" style="background:${tierMeta[e.tier].color}"></div>
+      <div class="rec-text">
+        <b>${e.name}</b>
+        <p>${e.recs}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectEvent(id){
+  selectedId = id;
+  renderLanes();
+  renderShap();
+}
+
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelector('main').scrollTo({top:0, behavior:'instant'});
+  window.scrollTo({top:0, behavior:'instant'});
+}
+
+function renderAll(){
+  renderTicker();
+  renderLanes();
+  renderShap();
+  renderAlloc();
+  renderRecs();
+}
+
+let secs = 0;
+document.getElementById('lastRun').textContent = 'connecting…';
+setInterval(()=>{
+  secs++;
+  if(liveMode) document.getElementById('lastRun').textContent = secs + 's ago';
+}, 1000);
+
+fetchLivePredictions();
+
+// ---------------- PWA: installable app shell ----------------
+// Registers a manifest + minimal service worker at runtime so this single
+// file can be "Added to Home Screen" as a standalone app when hosted
+// (works on http://localhost or any https:// origin — not on a raw
+// file:// preview, which browsers block from installing).
+(function setupPWA(){
+  try{
+    const iconSvg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+      <rect width='100' height='100' rx='20' fill='#0F1512'/>
+      <circle cx='50' cy='50' r='30' fill='none' stroke='url(#g)' stroke-width='10'/>
+      <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0%' stop-color='#E24C34'/><stop offset='50%' stop-color='#EFA23B'/><stop offset='100%' stop-color='#6FAE8B'/>
+      </linearGradient></defs>
+      <text x='50' y='58' font-family='Georgia,serif' font-size='28' font-weight='700' fill='#ECEAE0' text-anchor='middle'>DR</text>
+    </svg>`;
+    const iconUrl = 'data:image/svg+xml;base64,' + btoa(iconSvg);
+    const manifest = {
+      name: 'Disaster Relief AI — Priority Triage',
+      short_name: 'Relief Triage',
+      description: 'Live AI-driven disaster relief priority triage for India',
+      start_url: '.',
+      scope: '.',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#0F1512',
+      theme_color: '#0F1512',
+      icons: [
+        { src: iconUrl, sizes: '100x100', type: 'image/svg+xml', purpose: 'any' },
+        { src: iconUrl, sizes: '100x100', type: 'image/svg+xml', purpose: 'maskable' }
+      ]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+    const manifestUrl = URL.createObjectURL(manifestBlob);
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = manifestUrl;
+    document.head.appendChild(link);
+
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      const swCode = `
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('activate', e => self.clients.claim());
+        self.addEventListener('fetch', e => { /* network passthrough — live model data is never cached */ });
+      `;
+      const swBlob = new Blob([swCode], {type: 'text/javascript'});
+      const swUrl = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl).catch(()=>{});
+    }
+  }catch(e){ /* PWA install is a progressive enhancement — safe to skip */ }
+})();
+</script>
+
+</body>
+</html>
