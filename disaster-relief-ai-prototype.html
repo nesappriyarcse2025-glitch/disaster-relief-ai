@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disaster Relief AI — Live Priority Triage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0F1512;
+    --bg-raised: #161F1A;
+    --panel: #1B2620;
+    --panel-line: #2A3A32;
+    --text: #ECEAE0;
+    --muted: #8FA098;
+    --muted-2: #647069;
+    --critical: #E24C34;
+    --critical-dim: #4A2620;
+    --high: #EFA23B;
+    --high-dim: #453321;
+    --moderate: #E4CE6E;
+    --moderate-dim: #3D3A28;
+    --low: #6FAE8B;
+    --low-dim: #22362C;
+    --line: #263229;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+  .display{ font-family: 'Fraunces', serif; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #121A15, #0F1512);
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:8px;
+    background: conic-gradient(from 220deg, var(--critical), var(--high), var(--low), var(--critical));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fraunces', serif; font-weight:700; color:#0F1512; font-size:16px;
+  }
+  .brand-text h1{ font-size:16px; margin:0; letter-spacing:0.02em; font-weight:600; }
+  .brand-text p{ margin:2px 0 0; font-size:11.5px; color: var(--muted); letter-spacing:0.04em; text-transform:uppercase; }
+  .top-status{ display:flex; align-items:center; gap:22px; }
+  .status-chip{ display:flex; align-items:center; gap:7px; font-size:12.5px; color: var(--muted); }
+  .dot{ width:7px; height:7px; border-radius:50%; background: var(--low); box-shadow: 0 0 8px var(--low); animation: pulse 2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .clock{ font-size:12.5px; color: var(--muted-2); }
+
+  /* ---------- Layout ---------- */
+  .shell{ max-width: 1400px; margin: 0 auto; padding: 26px 32px 60px; }
+
+  .headline-row{ display:flex; justify-content:space-between; align-items:flex-end; gap: 24px; margin-bottom: 22px; flex-wrap:wrap; }
+  .headline-row h2{ font-family:'Fraunces', serif; font-weight:600; font-size: 30px; margin:0 0 6px; letter-spacing: -0.01em; }
+  .headline-row .sub{ color: var(--muted); font-size: 14px; max-width: 560px; line-height:1.5; }
+  .model-badge{
+    display:flex; align-items:center; gap:10px;
+    background: var(--panel); border:1px solid var(--panel-line);
+    padding: 10px 16px; border-radius: 10px; font-size: 12.5px;
+  }
+  .model-badge .mono{ color: var(--high); }
+
+  /* ---------- Live event ticker ---------- */
+  .ticker{
+    display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; margin-bottom: 26px;
+    scrollbar-width: thin;
+  }
+  .ticker-item{
+    flex: 0 0 auto; display:flex; align-items:center; gap:8px;
+    background: var(--bg-raised); border:1px solid var(--line);
+    padding: 8px 14px; border-radius: 999px; font-size: 12px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .ticker-item b{ color: var(--text); font-weight:500; }
+  .ticker-item .sev{ width:6px; height:6px; border-radius:50%; }
+
+  /* ---------- Grid ---------- */
+  .grid{ display:grid; grid-template-columns: 1.55fr 1fr; gap: 22px; align-items:start; }
+  @media (max-width: 1080px){ .grid{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    padding: 20px 20px 24px;
+    margin-bottom: 22px;
+  }
+  .panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .panel-head h3{ font-size: 13px; text-transform:uppercase; letter-spacing:0.08em; color: var(--muted); margin:0; font-weight:600; }
+  .panel-head .tag{ font-size:11px; color: var(--muted-2); }
+
+  /* ---------- Triage board ---------- */
+  .lanes{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 720px){ .lanes{ grid-template-columns: 1fr 1fr; } }
+  .lane{ border-radius: 12px; padding: 12px; min-height: 120px; }
+  .lane.crit{ background: var(--critical-dim); border: 1px solid #6A3324; }
+  .lane.high{ background: var(--high-dim); border: 1px solid #5C4527; }
+  .lane.mod{ background: var(--moderate-dim); border: 1px solid #4E4A34; }
+  .lane.low{ background: var(--low-dim); border: 1px solid #2F4A3B; }
+  .lane-label{ font-size: 11px; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; margin-bottom:10px; display:flex; justify-content:space-between; }
+  .lane.crit .lane-label{ color: var(--critical); }
+  .lane.high .lane-label{ color: var(--high); }
+  .lane.mod .lane-label{ color: var(--moderate); }
+  .lane.low .lane-label{ color: var(--low); }
+  .event-card{
+    background: rgba(0,0,0,0.22); border-radius: 9px; padding: 10px 11px; margin-bottom: 8px;
+    cursor: pointer; transition: transform 0.12s ease, background 0.12s ease;
+    border: 1px solid transparent;
+  }
+  .event-card:hover{ transform: translateY(-1px); background: rgba(0,0,0,0.34); }
+  .event-card.active{ border-color: currentColor; }
+  .event-card .name{ font-size: 12.5px; font-weight:600; margin-bottom:3px; }
+  .event-card .meta{ font-size: 10.5px; color: var(--muted); font-family:'IBM Plex Mono', monospace; }
+  .event-card .score{ font-family:'IBM Plex Mono', monospace; font-size: 11px; margin-top:5px; opacity:0.85; }
+
+  /* ---------- SHAP panel ---------- */
+  .selected-title{ font-family:'Fraunces', serif; font-size:19px; font-weight:600; margin: 0 0 4px; }
+  .selected-sub{ font-size:12px; color: var(--muted); margin-bottom:18px; }
+  .shap-row{ margin-bottom: 12px; }
+  .shap-label{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px; }
+  .shap-label .val{ font-family:'IBM Plex Mono', monospace; color: var(--muted); }
+  .shap-track{ height:7px; border-radius:4px; background: #0F1815; overflow:hidden; display:flex; }
+  .shap-bar{ height:100%; }
+  .shap-bar.pos{ background: var(--critical); }
+  .shap-bar.neg{ background: var(--low); }
+
+  .predict-box{
+    display:flex; align-items:center; gap:16px;
+    background: var(--bg-raised); border:1px solid var(--line); border-radius:10px;
+    padding: 14px 16px; margin-bottom:18px;
+  }
+  .predict-score{ font-family:'Fraunces', serif; font-size: 34px; font-weight:600; }
+  .predict-meta{ font-size:12px; color: var(--muted); line-height:1.5; }
+
+  /* ---------- Resource allocation ---------- */
+  .alloc-row{ display:flex; align-items:center; gap: 12px; margin-bottom: 12px; }
+  .alloc-label{ width: 92px; font-size: 12px; color: var(--muted); flex-shrink:0; }
+  .alloc-bar-track{ flex:1; height: 9px; background:#0F1815; border-radius:5px; overflow:hidden; }
+  .alloc-bar-fill{ height:100%; border-radius:5px; }
+  .alloc-num{ font-family:'IBM Plex Mono', monospace; font-size: 11.5px; width: 60px; text-align:right; color: var(--muted); }
+
+  /* ---------- Recommendation feed ---------- */
+  .rec-item{ display:flex; gap:12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .rec-item:last-child{ border-bottom:none; }
+  .rec-sev{ width: 4px; border-radius: 3px; flex-shrink:0; }
+  .rec-text b{ font-size: 12.5px; }
+  .rec-text p{ margin: 3px 0 0; font-size:11.5px; color: var(--muted); line-height:1.5; }
+
+  /* ---------- Scope strip ---------- */
+  .scope-strip{
+    display:flex; align-items:center; gap: 10px; flex-wrap:wrap;
+    background: var(--bg-raised); border:1px solid var(--line); border-radius: 10px;
+    padding: 10px 16px; margin-bottom: 20px; font-size: 12px; color: var(--muted);
+  }
+  .scope-strip .phase{ display:flex; align-items:center; gap:7px; }
+  .scope-strip .phase b{ color: var(--text); font-weight:600; }
+  .scope-strip .phase-dot{ width:7px; height:7px; border-radius:50%; }
+  .scope-strip .arrow{ color: var(--muted-2); }
+
+  /* ---------- Footer note ---------- */
+  .footnote{
+    margin-top: 6px; font-size: 11.5px; color: var(--muted-2); line-height:1.6;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+
+  /* ---------- Login overlay ---------- */
+  #loginOverlay{
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; z-index: 999;
+  }
+  .login-card{
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 14px;
+    padding: 32px 28px; width: 320px;
+  }
+  .login-card h2{ font-family:'Fraunces', serif; font-size: 20px; margin: 0 0 6px; }
+  .login-card p{ font-size: 12.5px; color: var(--muted); margin: 0 0 20px; }
+  .login-field{ margin-bottom: 14px; }
+  .login-field label{ display:block; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+  .login-field input{
+    width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg-raised); color: var(--text); font-size: 13px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .login-btn{
+    width: 100%; padding: 10px; border-radius: 8px; border: none; margin-top: 6px;
+    background: var(--high); color: #1A1200; font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  .login-error{ color: var(--critical); font-size: 12px; margin-top: 10px; display: none; }
+  .logout-link{ font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="loginOverlay">
+  <div class="login-card">
+    <h2 id="authTitle">Disaster Relief AI</h2>
+    <p id="authSubtitle">Sign in to view live priority predictions.</p>
+    <div class="login-field" id="nameField" style="display:none;">
+      <label>Full Name</label>
+      <input type="text" id="signupName" autocomplete="name">
+    </div>
+    <div class="login-field">
+      <label>Username</label>
+      <input type="text" id="loginUsername" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password">
+    </div>
+    <button class="login-btn" id="authSubmitBtn" onclick="attemptLogin()">Sign In</button>
+    <div class="login-error" id="loginError">Invalid username or password.</div>
+    <p style="text-align:center; margin-top:14px;">
+      <span class="logout-link" id="authToggle" onclick="toggleAuthMode()">New here? Create an account</span>
+    </p>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">DR</div>
+    <div class="brand-text">
+      <h1>Disaster Relief AI</h1>
+      <p>Resource Priority Prediction — Prototype</p>
+    </div>
+  </div>
+  <div class="top-status">
+    <div class="status-chip"><span class="dot"></span> Model: XGBoost · Active</div>
+    <div class="status-chip mono">Coverage: India (Phase 1)</div>
+    <div class="status-chip mono" id="whoAmI"></div>
+    <span class="logout-link" onclick="doLogout()">Log out</span>
+    <div class="clock mono" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<div class="shell">
+
+  <div class="headline-row">
+    <div>
+      <h2>Live Relief Priority Triage — India</h2>
+      <div class="sub">Every incoming disaster report is scored by the trained model and dropped into a priority lane — the same logic that would run on official EM-DAT and live NDMA/IMD-style ingestion feeds. Built to scale state-by-state across India first, then extend to a global feed once the pipeline is validated. Click any card to see why the model scored it that way.</div>
+    </div>
+    <div class="model-badge">
+      <span>Last inference:</span>
+      <span class="mono" id="lastRun">2s ago</span>
+    </div>
+  </div>
+
+  <div class="scope-strip">
+    <div class="phase"><span class="phase-dot" style="background:var(--low)"></span> <b>Phase 1 — India</b> · all 28 states + 8 UTs, EM-DAT + IMD/NDMA-style feeds</div>
+    <span class="arrow">→</span>
+    <div class="phase"><span class="phase-dot" style="background:var(--moderate)"></span> <b>Phase 2 — South Asia</b> · cross-border events (e.g. Nepal, Bangladesh)</div>
+    <span class="arrow">→</span>
+    <div class="phase"><span class="phase-dot" style="background:var(--high)"></span> <b>Phase 3 — Global</b> · full EM-DAT worldwide coverage</div>
+  </div>
+
+  <div class="ticker" id="ticker"></div>
+  <div id="connBanner" style="display:none; font-size:12px; padding:10px 16px; border-radius:10px; margin-bottom:18px;"></div>
+
+  <div class="grid">
+    <!-- LEFT: triage board + allocation -->
+    <div>
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Priority Lanes</h3>
+          <span class="tag">sorted by predicted severity score</span>
+        </div>
+        <div class="lanes" id="lanes"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Suggested Resource Allocation</h3>
+          <span class="tag">optimizer output — fixed relief pool</span>
+        </div>
+        <div id="alloc"></div>
+        <div class="footnote">Illustrative split of a fixed relief budget across current Critical/High regions, weighted by predicted severity and population affected. In the full system this feeds a linear-programming allocator, not just a proportional split.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: SHAP explainability + feed -->
+    <div>
+      <div class="panel" id="shapPanel">
+        <div class="panel-head">
+          <h3>Why This Score — SHAP</h3>
+          <span class="tag">selected event</span>
+        </div>
+        <div class="selected-title" id="selTitle">—</div>
+        <div class="selected-sub" id="selSub">—</div>
+        <div class="predict-box">
+          <div class="predict-score" id="selScore">—</div>
+          <div class="predict-meta">Predicted severity index (0–100)<br><span class="mono" id="selTier">—</span></div>
+        </div>
+        <div id="shapBars"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Model Recommendations</h3>
+          <span class="tag">auto-generated</span>
+        </div>
+        <div id="recs"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    Prototype for a B.E. CSE final-year project (XGBoost on EM-DAT). Phase 1 scope is India — all Indian events shown are simulated for demonstration; a production version would connect to NDMA/NEOC-style live feeds, IMD weather data, and satellite-derived exposure layers in place of the mock generator below. The Nepal card is included only as a Phase 2 cross-border preview and reflects the real flash-flood event of 26 Aug 2026 for scale reference — it is excluded from the Phase 1 resource allocation panel, which stays scoped to India.
+  </div>
+
+</div>
+
+<script>
+// ---------------- API connection ----------------
+const API_BASE = 'http://127.0.0.1:5000';
+
+// ---------------- Event definitions ----------------
+// Display metadata is fixed (names, coordinates, human-readable context).
+// severity_score / priority_tier / SHAP explanation come from the live model —
+// these are NOT hardcoded; they're fetched from your trained XGBoost API below.
+const eventSeeds = [
+  {
+    id: 'e0', name: 'Rasuwagadhi Border Belt, Uttarakhand', type: 'Flash Flood — Himalayan Border Zone (simulated)',
+    deaths: 'Casualties reported, rescue ongoing', lat: '30.78°N', lon: '78.94°E',
+    features: { "Disaster Type": "Flood", "Disaster Subtype": "Flash flood", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "Yes" },
+    recs: 'Deploy air rescue given road cutoff; flag for glacial/high-altitude hazard monitoring, not just standard monsoon protocol.'
+  },
+  {
+    id: 'e1', name: 'Coastal Odisha, India', type: 'Cyclonic Storm (simulated)',
+    deaths: 'Evacuation in progress', lat: '19.8°N', lon: '85.8°E',
+    features: { "Disaster Type": "Storm", "Disaster Subtype": "Tropical cyclone", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": "Kph", "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Shelter capacity is typically the binding constraint in coastal cyclone response — prioritize shelter logistics.'
+  },
+  {
+    id: 'e4', name: 'Wayanad District, India', type: 'Landslide risk (simulated)',
+    deaths: 'No casualties reported', lat: '11.68°N', lon: '76.13°E',
+    features: { "Disaster Type": "Landslide", "Disaster Subtype": "Landslide", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Flag for field survey and continued sensor monitoring based on predicted tier.'
+  },
+  {
+    id: 'e5', name: 'Assam River Belt, India', type: 'Seasonal Flood (simulated)',
+    deaths: 'No casualties reported', lat: '26.2°N', lon: '92.9°E',
+    features: { "Disaster Type": "Flood", "Disaster Subtype": "Riverine flood", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 7, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Route to standard monsoon relief protocol unless predicted tier escalates.'
+  },
+  {
+    id: 'e6', name: 'Tripura Hills, India', type: 'Weather Advisory (simulated)',
+    deaths: 'None', lat: '23.9°N', lon: '91.6°E',
+    features: { "Disaster Type": "Storm", "Disaster Subtype": "Convective storm", "Country": "India",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "No", "Declaration": "No" },
+    recs: 'Continue passive monitoring based on predicted tier.'
+  },
+  {
+    id: 'e7', name: 'Rasuwa District, Nepal', type: 'Flash Flood / Glacial Debris Flow — Phase 2 preview',
+    deaths: '270+ confirmed, ~1,400 missing (real event, 26 Aug 2026)', lat: '28.10°N', lon: '85.36°E',
+    features: { "Disaster Type": "Flood", "Disaster Subtype": "Flash flood", "Country": "Nepal",
+      "Region": "Asia", "Subregion": "Southern Asia", "Start Month": 8, "Magnitude": null,
+      "Magnitude Scale": null, "OFDA/BHA Response": "No", "Appeal": "Yes", "Declaration": "Yes" },
+    recs: 'Shown only as a cross-border Phase 2 reference — excluded from India Phase 1 allocation.',
+    phase2: true
+  },
+];
+
+const tierClass = { Critical:'crit', High:'high', Moderate:'mod', Low:'low' };
+const tierMeta = {
+  crit: {label:'Critical', color:'var(--critical)'},
+  high: {label:'High', color:'var(--high)'},
+  mod:  {label:'Moderate', color:'var(--moderate)'},
+  low:  {label:'Low', color:'var(--low)'},
+};
+
+let events = [];           // populated from the live API
+let selectedId = 'e0';
+let liveMode = false;
+
+function showBanner(text, kind){
+  const el = document.getElementById('connBanner');
+  el.style.display = 'block';
+  el.textContent = text;
+  el.style.background = kind === 'ok' ? 'var(--low-dim)' : 'var(--critical-dim)';
+  el.style.color = kind === 'ok' ? 'var(--low)' : 'var(--critical)';
+  el.style.border = '1px solid ' + (kind === 'ok' ? 'var(--low)' : 'var(--critical)');
+}
+
+// Calls YOUR real Flask + XGBoost + SHAP backend for every seed event.
+async function fetchLivePredictions(){
+  try {
+    const results = await Promise.all(eventSeeds.map(async seed => {
+      const res = await fetch(`${API_BASE}/predict`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(seed.features)
+      });
+      if(!res.ok) throw new Error('predict failed for ' + seed.id);
+      const data = await res.json();
+      return {
+        ...seed,
+        score: data.severity_score,
+        tier: tierClass[data.priority_tier],
+        shap: data.explanation.map(s => ({
+          label: s.feature,
+          val: Math.abs(s.shap_value),
+          dir: s.direction === 'increases_severity' ? 'pos' : 'neg'
+        }))
+      };
+    }));
+    events = results;
+    liveMode = true;
+    showBanner('Connected to live model — predictions computed by your trained XGBoost + SHAP backend just now.', 'ok');
+  } catch (err) {
+    liveMode = false;
+    showBanner('Could not reach the model server at ' + API_BASE + ' — showing static demo values instead. Start "python app.py" on your machine, then reload this page.', 'err');
+    // fallback so the dashboard still renders something if the backend isn't running
+    events = eventSeeds.map(seed => ({
+      ...seed, score: 30, tier: 'mod',
+      shap: [{label:'Model server not reachable', val: 1, dir:'pos'}]
+    }));
+  }
+  renderAll();
+}
+
+function renderTicker(){
+  const el = document.getElementById('ticker');
+  el.innerHTML = events.map(e => `
+    <div class="ticker-item">
+      <span class="sev" style="background:${tierMeta[e.tier].color}"></span>
+      <b>${e.name}</b> — ${e.type} · score ${e.score}
+    </div>
+  `).join('');
+}
+
+function renderLanes(){
+  const el = document.getElementById('lanes');
+  const order = ['crit','high','mod','low'];
+  el.innerHTML = order.map(tier => {
+    const items = events.filter(e => e.tier === tier).sort((a,b)=>b.score-a.score);
+    return `
+      <div class="lane ${tier}">
+        <div class="lane-label"><span>${tierMeta[tier].label}</span><span>${items.length}</span></div>
+        ${items.map(e => `
+          <div class="event-card ${e.id===selectedId ? 'active':''}" style="color:${tierMeta[tier].color}" onclick="selectEvent('${e.id}')">
+            <div class="name">${e.name}</div>
+            <div class="meta">${e.lat} · ${e.lon}</div>
+            <div class="score">severity ${e.score}/100</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderShap(){
+  const e = events.find(x => x.id === selectedId);
+  if(!e) return;
+  document.getElementById('selTitle').textContent = e.name;
+  document.getElementById('selSub').textContent = `${e.type} · ${e.deaths}`;
+  document.getElementById('selScore').textContent = e.score;
+  document.getElementById('selScore').style.color = tierMeta[e.tier].color;
+  document.getElementById('selTier').textContent = `Predicted tier: ${tierMeta[e.tier].label.toUpperCase()}${liveMode ? ' · live model' : ' · demo fallback'}`;
+
+  const maxVal = Math.max(...e.shap.map(s => s.val));
+  document.getElementById('shapBars').innerHTML = e.shap.map(s => `
+    <div class="shap-row">
+      <div class="shap-label"><span>${s.label}</span><span class="val">${s.dir === 'pos' ? '+' : '−'}${s.val.toFixed ? s.val.toFixed(2) : s.val}</span></div>
+      <div class="shap-track">
+        <div class="shap-bar ${s.dir}" style="width:${(s.val/maxVal*100).toFixed(0)}%"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAlloc(){
+  const top = events.filter(e => !e.phase2 && (e.tier === 'crit' || e.tier === 'high')).sort((a,b)=>b.score-a.score);
+  const total = top.reduce((s,e)=>s+e.score,0) || 1;
+  document.getElementById('alloc').innerHTML = top.length ? top.map(e => {
+    const pct = Math.round(e.score/total*100);
+    return `
+      <div class="alloc-row">
+        <div class="alloc-label">${e.name.split(',')[0]}</div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:${pct}%; background:${tierMeta[e.tier].color}"></div></div>
+        <div class="alloc-num">${pct}%</div>
+      </div>
+    `;
+  }).join('') : '<div style="font-size:12px; color:var(--muted)">No Critical/High India events right now.</div>';
+}
+
+function renderRecs(){
+  const sorted = [...events].sort((a,b)=>b.score-a.score).slice(0,4);
+  document.getElementById('recs').innerHTML = sorted.map(e => `
+    <div class="rec-item">
+      <div class="rec-sev" style="background:${tierMeta[e.tier].color}"></div>
+      <div class="rec-text">
+        <b>${e.name}</b>
+        <p>${e.recs}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectEvent(id){
+  selectedId = id;
+  renderLanes();
+  renderShap();
+}
+
+function renderAll(){
+  renderTicker();
+  renderLanes();
+  renderShap();
+  renderAlloc();
+  renderRecs();
+}
+
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-IN', {hour12:false});
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+let secs = 0;
+document.getElementById('lastRun').textContent = 'connecting…';
+setInterval(()=>{
+  secs++;
+  if(liveMode) document.getElementById('lastRun').textContent = secs + 's ago';
+}, 1000);
+
+// ---------------- Login / Signup / session handling ----------------
+let authMode = 'login'; // 'login' or 'signup'
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('nameField').style.display = authMode === 'signup' ? 'block' : 'none';
+  document.getElementById('authTitle').textContent = authMode === 'signup' ? 'Create Account' : 'Disaster Relief AI';
+  document.getElementById('authSubtitle').textContent = authMode === 'signup'
+    ? 'Anyone can create an account — pick a username and password.'
+    : 'Sign in to view live priority predictions.';
+  document.getElementById('authSubmitBtn').textContent = authMode === 'signup' ? 'Create Account & Sign In' : 'Sign In';
+  document.getElementById('authToggle').textContent = authMode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account';
+  document.getElementById('loginError').style.display = 'none';
+}
+
+async function attemptLogin(){
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const name = document.getElementById('signupName').value.trim();
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  const endpoint = authMode === 'signup' ? '/signup' : '/login';
+  const body = authMode === 'signup' ? {username, password, name} : {username, password};
+
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if(!res.ok){
+      errEl.textContent = data.error || 'Something went wrong.';
+      errEl.style.display = 'block';
+      return;
+    }
+    onLoginSuccess(data.user);
+  } catch(err){
+    errEl.textContent = 'Could not reach the server — is app.py running?';
+    errEl.style.display = 'block';
+  }
+}
+
+function onLoginSuccess(user){
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('whoAmI').textContent = `Logged in: ${user.name} (${user.role})`;
+  fetchLivePredictions();
+}
+
+async function doLogout(){
+  await fetch(`${API_BASE}/logout`, {method: 'POST', credentials: 'include'});
+  location.reload();
+}
+
+async function checkExistingSession(){
+  try {
+    const res = await fetch(`${API_BASE}/me`, {credentials: 'include'});
+    if(res.ok){
+      const data = await res.json();
+      onLoginSuccess(data.user);
+    }
+  } catch(err){ /* not logged in — login overlay stays visible */ }
+}
+
+// Allow pressing Enter in the password field to submit
+document.getElementById('loginPassword')?.addEventListener('keydown', e => {
+  if(e.key === 'Enter') attemptLogin();
+});
+
+checkExistingSession();
+</script>
+
+</body>
+</html>
